@@ -510,8 +510,8 @@ with st.sidebar:
     <div style='font-family:"Share Tech Mono";font-size:0.65rem;color:#4a6580;
                 line-height:1.8;'>
     v2.0.0 — DEPLOYMENT BUILD<br>
-    Imperial College London<br>
-    National Heart & Lung Institute
+    Defence Research and Developmental Organisation<br>
+    Vellore Institute of Technology
     </div>
     """, unsafe_allow_html=True)
 
