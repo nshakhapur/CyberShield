@@ -500,7 +500,7 @@ with st.sidebar:
 
     st.markdown("<hr style='border-color:#0d2545;margin:16px 0;'/>", unsafe_allow_html=True)
 
-    n_demo = st.slider("Demo sample count", 100, 2000, 500, 50)
+    n_demo = st.slider("Sample count", 100, 2000, 500, 50)
 
     st.markdown("<hr style='border-color:#0d2545;margin:16px 0;'/>", unsafe_allow_html=True)
 
