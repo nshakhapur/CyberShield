@@ -500,9 +500,7 @@ with st.sidebar:
 
     st.markdown("<hr style='border-color:#0d2545;margin:16px 0;'/>", unsafe_allow_html=True)
 
-    demo_mode = st.toggle("🔧 Demo Mode (no model files)", value=True)
-    n_demo    = st.slider("Demo sample count", 100, 2000, 500, 50,
-                          disabled=not demo_mode)
+    n_demo = st.slider("Demo sample count", 100, 2000, 500, 50)
 
     st.markdown("<hr style='border-color:#0d2545;margin:16px 0;'/>", unsafe_allow_html=True)
 
@@ -538,37 +536,26 @@ st.markdown("""
 # ─────────────────────────────────────────────────────────────────────────────
 # LOAD MODELS / DEMO DATA
 # ─────────────────────────────────────────────────────────────────────────────
-if demo_mode:
-    # Synthetic demo — no model files needed
-    np.random.seed(42)
-    N = n_demo
-    demo_actions = np.random.choice(
-        ["ALLOW","MONITOR","BLOCK","ISOLATE"],
-        size=N,
-        p=[0.55, 0.22, 0.15, 0.08]
-    )
-    demo_mse      = np.abs(np.random.randn(N) * 0.04 + 0.02)
-    demo_severity = np.where(demo_mse > 0.09, 2, np.where(demo_mse > 0.05, 1, 0))
-    demo_X        = np.random.randn(N, 78)
+demo_mode = True
 
-    results    = list(demo_actions)
-    mse_vals   = demo_mse
-    severity   = demo_severity
-    X_data     = demo_X
-    model_ok   = True
-    load_error = []
+np.random.seed(42)
+N = n_demo
+demo_actions = np.random.choice(
+    ["ALLOW","MONITOR","BLOCK","ISOLATE"],
+    size=N,
+    p=[0.55, 0.22, 0.15, 0.08]
+)
+demo_mse      = np.abs(np.random.randn(N) * 0.04 + 0.02)
+demo_severity = np.where(demo_mse > 0.09, 2, np.where(demo_mse > 0.05, 1, 0))
+demo_X        = np.random.randn(N, 78)
 
-    st.info("🔧 **Demo Mode active** — synthetic data shown. Disable in sidebar to run real models.", icon="ℹ️")
-else:
-    with st.spinner("Loading model pipeline..."):
-        models, load_error = load_models()
-    model_ok = len(models) >= 6
-
-    if load_error:
-        for e in load_error:
-            st.warning(f"⚠️ {e}")
-
-    results = mse_vals = severity = X_data = None
+results    = list(demo_actions)
+mse_vals   = demo_mse
+severity   = demo_severity
+X_data     = demo_X
+model_ok   = True
+load_error = []
+models     = {}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
@@ -797,6 +784,9 @@ with tab3:
                 if not model_ok:
                     st.error("Model files not found.")
                     break
+                if X_data is None:
+                    st.error("Upload a CSV in the Batch Analysis tab first to provide traffic data.")
+                    break
                 sample = X_data[i % len(X_data)]
                 sample_s = models["scaler"].transform(sample.reshape(1,-1))
                 rf_p  = models["rf"].predict_proba(sample_s)
@@ -901,7 +891,8 @@ with tab4:
     # Feature stats
     st.markdown("<div class='section-header'>FEATURE HEATMAP <span>// first 50 samples</span></div>",
                 unsafe_allow_html=True)
-    st.plotly_chart(feature_heatmap(X_data if demo_mode else demo_X), use_container_width=True, key="diag_heatmap")
+    _hmap_data = X_data if X_data is not None else np.random.randn(50, 78)
+    st.plotly_chart(feature_heatmap(_hmap_data), use_container_width=True, key="diag_heatmap")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 5 — PREDICT & TEST
@@ -1266,9 +1257,12 @@ with tab5:
 
         if demo_mode:
             action_sl, mse_sl, sev_sl = demo_predict_single(vec_sl, threshold_v)
-        else:
+        elif model_ok:
             action_sl, mse_sl, sev_sl = real_predict_single(vec_sl, models)
             threshold_v = float(models["threshold"])
+        else:
+            st.error("Model files not found. Enable Demo Mode in sidebar.")
+            action_sl, mse_sl, sev_sl = "ALLOW", 0.0, 0
 
         col_r, col_e = st.columns([1, 1])
         with col_r:
