@@ -1070,15 +1070,77 @@ with tab5:
     with sec1:
         st.markdown("<div class='section-header'>MANUAL FEATURE INPUT <span>// enter network flow values</span></div>",
                     unsafe_allow_html=True)
+
+        # Traffic template presets
+        TEMPLATES = {
+            "— Custom —": {
+                "Flow Duration": 100000.0, "Total Fwd Packets": 10.0,
+                "Total Bwd Packets": 5.0,  "Flow Bytes/s": 5000.0,
+                "Flow Packets/s": 100.0,   "Fwd Packet Length Mean": 500.0,
+                "Bwd Packet Length Mean": 400.0, "Flow IAT Mean": 10000.0,
+                "SYN Flag Count": 0.0,     "ACK Flag Count": 10.0,
+                "PSH Flag Count": 2.0,     "Average Packet Size": 512.0,
+            },
+            "🌐  Normal Web Traffic": {
+                "Flow Duration": 150000.0, "Total Fwd Packets": 12.0,
+                "Total Bwd Packets": 8.0,  "Flow Bytes/s": 2500.0,
+                "Flow Packets/s": 80.0,    "Fwd Packet Length Mean": 650.0,
+                "Bwd Packet Length Mean": 500.0, "Flow IAT Mean": 8000.0,
+                "SYN Flag Count": 0.0,     "ACK Flag Count": 15.0,
+                "PSH Flag Count": 3.0,     "Average Packet Size": 580.0,
+            },
+            "💥  DDoS Attack": {
+                "Flow Duration": 5000.0,   "Total Fwd Packets": 500.0,
+                "Total Bwd Packets": 10.0, "Flow Bytes/s": 2000000.0,
+                "Flow Packets/s": 5000.0,  "Fwd Packet Length Mean": 60.0,
+                "Bwd Packet Length Mean": 40.0, "Flow IAT Mean": 200.0,
+                "SYN Flag Count": 30.0,    "ACK Flag Count": 50.0,
+                "PSH Flag Count": 0.0,     "Average Packet Size": 60.0,
+            },
+            "🔍  Port Scan": {
+                "Flow Duration": 80000.0,  "Total Fwd Packets": 4.0,
+                "Total Bwd Packets": 0.0,  "Flow Bytes/s": 100.0,
+                "Flow Packets/s": 50.0,    "Fwd Packet Length Mean": 50.0,
+                "Bwd Packet Length Mean": 0.0, "Flow IAT Mean": 500.0,
+                "SYN Flag Count": 5.0,     "ACK Flag Count": 0.0,
+                "PSH Flag Count": 0.0,     "Average Packet Size": 50.0,
+            },
+            "📤  Data Exfiltration": {
+                "Flow Duration": 500000.0, "Total Fwd Packets": 80.0,
+                "Total Bwd Packets": 20.0, "Flow Bytes/s": 200000.0,
+                "Flow Packets/s": 200.0,   "Fwd Packet Length Mean": 1400.0,
+                "Bwd Packet Length Mean": 1200.0, "Flow IAT Mean": 3000.0,
+                "SYN Flag Count": 0.0,     "ACK Flag Count": 20.0,
+                "PSH Flag Count": 10.0,    "Average Packet Size": 1350.0,
+            },
+            "🔑  Brute Force": {
+                "Flow Duration": 200000.0, "Total Fwd Packets": 30.0,
+                "Total Bwd Packets": 15.0, "Flow Bytes/s": 1200.0,
+                "Flow Packets/s": 150.0,   "Fwd Packet Length Mean": 250.0,
+                "Bwd Packet Length Mean": 200.0, "Flow IAT Mean": 300.0,
+                "SYN Flag Count": 3.0,     "ACK Flag Count": 5.0,
+                "PSH Flag Count": 1.0,     "Average Packet Size": 230.0,
+            },
+        }
+
+        template_sel = st.selectbox(
+            "Load traffic template",
+            list(TEMPLATES.keys()),
+            key="manual_template",
+            help="Pre-fills all fields with representative values for the selected traffic type.",
+        )
+        tpl = TEMPLATES[template_sel]
+
         st.markdown("""
         <div style='font-family:"Share Tech Mono";font-size:0.72rem;color:#4a6580;
                     margin-bottom:16px;'>
-        Enter values for the most diagnostic network flow features below.
-        Leave blank to use 0. All values are automatically scaled by the pipeline.
+        Select a template above or enter custom values below.
+        All values are automatically scaled by the pipeline.
         </div>
         """, unsafe_allow_html=True)
 
-        # Show 12 key features in 3 columns
+        # Show 12 key features in 3 columns — key includes template so fields
+        # reset whenever a new template is selected
         KEY_FEATURES = [
             ("Flow Duration",         0.0,   5e7,  100000.0),
             ("Total Fwd Packets",     0.0,   5000, 10.0),
@@ -1098,10 +1160,11 @@ with tab5:
         cols_m = st.columns(3)
         for idx, (fname, fmin, fmax, fdef) in enumerate(KEY_FEATURES):
             with cols_m[idx % 3]:
+                default_val = float(min(max(tpl.get(fname, fdef), fmin), fmax))
                 manual_vals[fname] = st.number_input(
                     fname, min_value=float(fmin), max_value=float(fmax),
-                    value=float(fdef), step=float((fmax - fmin) / 200),
-                    format="%.2f", key=f"manual_{idx}"
+                    value=default_val, step=float((fmax - fmin) / 200),
+                    format="%.2f", key=f"manual_{idx}_{template_sel}"
                 )
 
         st.markdown("<br/>", unsafe_allow_html=True)
