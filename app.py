@@ -942,19 +942,33 @@ with tab5:
     N_FEATURES = len(FEATURE_NAMES)
 
     def demo_predict_single(sample_vec, threshold=0.05):
-        """Demo prediction using CIC-IDS feature range normalisation."""
-        # Normalise key features to [0,1] using typical CIC-IDS value ranges
+        """Demo prediction using rule-based CIC-IDS attack signatures."""
         _get = lambda name: float(sample_vec[FEATURE_NAMES.index(name)]) if name in FEATURE_NAMES else 0.0
-        s_bytes = min(_get("Flow Bytes/s")          / 1e7,  1.0)
-        s_pkts  = min(_get("Flow Packets/s")        / 1e6,  1.0)
-        s_syn   = min(_get("SYN Flag Count")        / 200,  1.0)
-        s_iat   = 1.0 - min(_get("Flow IAT Mean")   / 1e7,  1.0)   # low IAT = suspicious
-        s_tiny  = 1.0 - min(_get("Fwd Packet Length Mean") / 1500, 1.0)  # tiny pkts = suspicious
-        s_asym  = min(abs(_get("Total Fwd Packets") - _get("Total Bwd Packets")) / 500, 1.0)
-        score = (s_bytes * 0.35 + s_pkts * 0.15 + s_syn * 0.20
-                 + s_iat * 0.15 + s_tiny * 0.10 + s_asym * 0.05)
-        noise = abs(np.random.randn()) * 0.01
-        mse_v = float(score * threshold * 5 + noise)
+        flow_bytes = _get("Flow Bytes/s")
+        syn_cnt    = _get("SYN Flag Count")
+        iat_mean   = _get("Flow IAT Mean")
+        pkt_len    = _get("Fwd Packet Length Mean") or _get("Average Packet Size") or 1500.0
+        noise = abs(np.random.randn()) * 0.004
+
+        # ISOLATE: DDoS — massive volume AND at least one attack indicator
+        if flow_bytes > 50_000 and (syn_cnt > 3 or iat_mean < 1_000 or pkt_len < 150):
+            mse_v = threshold * 4.0 + noise
+        # BLOCK: large-volume exfiltration (no DDoS flags)
+        elif flow_bytes > 50_000:
+            mse_v = threshold * 2.5 + noise
+        # BLOCK: port scan — tiny packets + SYNs + rapid bursts
+        elif pkt_len < 100 and syn_cnt >= 1 and iat_mean < 2_000:
+            mse_v = threshold * 2.2 + noise
+        # BLOCK: brute force — SYNs + small packets + very fast IAT
+        elif syn_cnt >= 1 and iat_mean < 1_000 and pkt_len < 500:
+            mse_v = threshold * 2.0 + noise
+        # MONITOR: moderate anomaly — elevated bytes or any SYN or suspiciously fast IAT
+        elif flow_bytes > 10_000 or syn_cnt >= 1 or (0 < iat_mean < 1_000):
+            mse_v = threshold * 1.2 + noise
+        # ALLOW: baseline normal traffic
+        else:
+            mse_v = threshold * 0.4 + noise
+
         if mse_v > threshold * 3:
             sev, action = 2, "ISOLATE"
         elif mse_v > threshold * 1.5:
