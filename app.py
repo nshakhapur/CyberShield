@@ -376,6 +376,8 @@ def timeline_chart(results, window=200):
     fig.update_yaxes(tickvals=[0,1,2,3],
                      ticktext=["ALLOW","MONITOR","BLOCK","ISOLATE"])
     dark_layout(fig, f"DETECTION TIMELINE  (last {n} packets)")
+    fig.update_xaxes(title_text="Packet Index", title_font=FONT)
+    fig.update_yaxes(title_text="Action Level", title_font=FONT)
     return fig
 
 
@@ -398,6 +400,8 @@ def mse_chart(mse_vals, threshold, window=300):
     fig.add_hline(y=float(threshold*3), line=dict(color="#ff3a5c", dash="dash", width=1),
                   annotation_text="critical", annotation_font_color="#ff3a5c")
     dark_layout(fig, "AUTOENCODER RECONSTRUCTION ERROR  (anomaly detection)")
+    fig.update_xaxes(title_text="Packet Index", title_font=FONT)
+    fig.update_yaxes(title_text="Reconstruction Error (MSE)", title_font=FONT)
     return fig
 
 
@@ -415,6 +419,8 @@ def severity_bar(severity_arr):
         textfont=dict(family="Share Tech Mono", color="#c8d8e8"),
     ))
     dark_layout(fig, "SEVERITY LEVEL DISTRIBUTION")
+    fig.update_xaxes(title_text="Severity Level", title_font=FONT)
+    fig.update_yaxes(title_text="Packet Count", title_font=FONT)
     return fig
 
 
@@ -458,6 +464,8 @@ def feature_heatmap(X_sample, feature_names=None):
         hovertemplate="Feature: %{x}<br>Sample: %{y}<br>Value: %{z:.4f}<extra></extra>",
     ))
     dark_layout(fig, f"FEATURE HEATMAP  (first {n} samples × {f} features)", h=420)
+    fig.update_xaxes(title_text="Feature", title_font=FONT)
+    fig.update_yaxes(title_text="Sample Index", title_font=FONT)
     return fig
 
 
@@ -932,8 +940,19 @@ with tab5:
     N_FEATURES = len(FEATURE_NAMES)
 
     def demo_predict_single(sample_vec, threshold=0.05):
-        """Deterministic demo prediction based on synthetic heuristics."""
-        mse_v = float(np.mean(sample_vec**2) * 0.001 + abs(np.random.randn()) * 0.01)
+        """Demo prediction using CIC-IDS feature range normalisation."""
+        # Normalise key features to [0,1] using typical CIC-IDS value ranges
+        _get = lambda name: float(sample_vec[FEATURE_NAMES.index(name)]) if name in FEATURE_NAMES else 0.0
+        s_bytes = min(_get("Flow Bytes/s")          / 1e7,  1.0)
+        s_pkts  = min(_get("Flow Packets/s")        / 1e6,  1.0)
+        s_syn   = min(_get("SYN Flag Count")        / 200,  1.0)
+        s_iat   = 1.0 - min(_get("Flow IAT Mean")   / 1e7,  1.0)   # low IAT = suspicious
+        s_tiny  = 1.0 - min(_get("Fwd Packet Length Mean") / 1500, 1.0)  # tiny pkts = suspicious
+        s_asym  = min(abs(_get("Total Fwd Packets") - _get("Total Bwd Packets")) / 500, 1.0)
+        score = (s_bytes * 0.35 + s_pkts * 0.15 + s_syn * 0.20
+                 + s_iat * 0.15 + s_tiny * 0.10 + s_asym * 0.05)
+        noise = abs(np.random.randn()) * 0.01
+        mse_v = float(score * threshold * 5 + noise)
         if mse_v > threshold * 3:
             sev, action = 2, "ISOLATE"
         elif mse_v > threshold * 1.5:
@@ -1026,10 +1045,9 @@ with tab5:
         """, unsafe_allow_html=True)
 
     # ── Three sub-sections ──────────────────────────────────────────────────
-    sec1, sec2, sec3 = st.tabs([
+    sec1, sec2 = st.tabs([
         "✏️  Manual Feature Entry",
         "🎲  Random Sample Tester",
-        "🎚️  Interactive Demo Sliders",
     ])
 
     # ── SECTION 1: Manual Entry ─────────────────────────────────────────────
@@ -1173,7 +1191,6 @@ with tab5:
             for fname, val in assignments.items():
                 if fname in FEATURE_NAMES:
                     vec[FEATURE_NAMES.index(fname)] = val
-            vec += np.random.randn(N_FEATURES) * 0.5
 
             if demo_mode:
                 action, mse_v, sev = demo_predict_single(vec)
@@ -1211,98 +1228,6 @@ with tab5:
             fig_feat.update_xaxes(tickangle=-30)
             st.plotly_chart(fig_feat, use_container_width=True, key="predict_feat")
 
-    # ── SECTION 3: Interactive Sliders ──────────────────────────────────────
-    with sec3:
-        st.markdown("<div class='section-header'>INTERACTIVE DEMO SLIDERS <span>// tweak & watch prediction change</span></div>",
-                    unsafe_allow_html=True)
-        st.markdown("""
-        <div style='font-family:"Share Tech Mono";font-size:0.72rem;color:#4a6580;
-                    margin-bottom:20px;'>
-        Drag any slider — the prediction updates instantly. Watch how each feature
-        pushes the RL agent between ALLOW → MONITOR → BLOCK → ISOLATE.
-        </div>
-        """, unsafe_allow_html=True)
-
-        threshold_v = 0.05
-
-        c1, c2 = st.columns(2)
-        with c1:
-            sl_flow_bytes = st.slider("Flow Bytes/s",        0.0, 1e7,  500.0,    step=100.0,   key="sl1")
-            sl_pkt_len    = st.slider("Avg Packet Length",   0.0, 1500.0, 512.0,  step=10.0,    key="sl2")
-            sl_iat        = st.slider("Flow IAT Mean (µs)",  0.0, 1e6,  5000.0,   step=100.0,   key="sl3")
-            sl_syn        = st.slider("SYN Flag Count",      0,   200,   0,        step=1,        key="sl4")
-        with c2:
-            sl_fwd_pkts   = st.slider("Total Fwd Packets",   0,   5000,  10,       step=1,        key="sl5")
-            sl_ack        = st.slider("ACK Flag Count",      0,   500,   10,       step=1,        key="sl6")
-            sl_duration   = st.slider("Flow Duration (µs)",  0.0, 5e7, 100000.0,  step=1000.0,  key="sl7")
-            sl_psh        = st.slider("PSH Flag Count",      0,   200,   2,        step=1,        key="sl8")
-
-        # Build vector from sliders
-        vec_sl = np.zeros(N_FEATURES)
-        sl_map = {
-            "Flow Bytes/s":           sl_flow_bytes,
-            "Avg Packet Length":      sl_pkt_len,
-            "Flow IAT Mean":          sl_iat,
-            "SYN Flag Count":         sl_syn,
-            "Total Fwd Packets":      sl_fwd_pkts,
-            "ACK Flag Count":         sl_ack,
-            "Flow Duration":          sl_duration,
-            "PSH Flag Count":         sl_psh,
-            "Average Packet Size":    sl_pkt_len,
-            "Fwd Packet Length Mean": sl_pkt_len,
-        }
-        for fname, val in sl_map.items():
-            if fname in FEATURE_NAMES:
-                vec_sl[FEATURE_NAMES.index(fname)] = val
-
-        if demo_mode:
-            action_sl, mse_sl, sev_sl = demo_predict_single(vec_sl, threshold_v)
-        elif model_ok:
-            action_sl, mse_sl, sev_sl = real_predict_single(vec_sl, models)
-            threshold_v = float(models["threshold"])
-        else:
-            st.error("Model files not found. Enable Demo Mode in sidebar.")
-            action_sl, mse_sl, sev_sl = "ALLOW", 0.0, 0
-
-        col_r, col_e = st.columns([1, 1])
-        with col_r:
-            render_result_card(action_sl, mse_sl, sev_sl, "LIVE SLIDER — ")
-
-        with col_e:
-            render_explanation(action_sl, mse_sl, sev_sl, threshold_v)
-
-        # Live radar of slider values (normalised)
-        sl_radar_labels = ["Flow Bytes/s","Pkt Length","IAT","SYN Flags",
-                           "Fwd Packets","ACK Flags","Duration","PSH Flags"]
-        sl_radar_vals_raw = [sl_flow_bytes/1e7, sl_pkt_len/1500,
-                             sl_iat/1e6, sl_syn/200,
-                             sl_fwd_pkts/5000, sl_ack/500,
-                             sl_duration/5e7, sl_psh/200]
-        sl_radar_vals = sl_radar_vals_raw + [sl_radar_vals_raw[0]]
-        sl_radar_labels_c = sl_radar_labels + [sl_radar_labels[0]]
-
-        _c = ACTION_COLORS[action_sl].lstrip("#")
-        _radar_fill = "rgba({},{},{},0.13)".format(int(_c[0:2],16), int(_c[2:4],16), int(_c[4:6],16))
-        fig_radar = go.Figure(go.Scatterpolar(
-            r=sl_radar_vals, theta=sl_radar_labels_c,
-            fill="toself",
-            fillcolor=_radar_fill,
-            line=dict(color=ACTION_COLORS[action_sl], width=2),
-            name="Current Input",
-        ))
-        fig_radar.update_layout(
-            polar=dict(
-                bgcolor="rgba(5,11,20,0.9)",
-                angularaxis=dict(tickfont=FONT, linecolor=GRID, gridcolor=GRID),
-                radialaxis=dict(range=[0,1], tickfont=FONT, gridcolor=GRID),
-            ),
-            paper_bgcolor=PLOT_BG, font=FONT, height=360,
-            margin=dict(l=20,r=20,t=40,b=20),
-            title=dict(text="INPUT FEATURE RADAR  (normalised)",
-                       font=dict(family="Rajdhani", size=14,
-                                 color=ACTION_COLORS[action_sl]), x=0.01),
-        )
-        st.plotly_chart(fig_radar, use_container_width=True, key="predict_radar")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
