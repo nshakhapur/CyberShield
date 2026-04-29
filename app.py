@@ -894,6 +894,8 @@ with tab4:
     fig_thresh.add_vline(x=threshold_val,   line=dict(color="#ffc300", width=2, dash="dash"))
     fig_thresh.add_vline(x=threshold_val*3, line=dict(color="#ff3a5c", width=2, dash="dash"))
     dark_layout(fig_thresh, "MSE SEVERITY ZONES")
+    fig_thresh.update_xaxes(title_text="Reconstruction Error (MSE)", title_font=FONT)
+    fig_thresh.update_yaxes(title_text="Anomaly Score", title_font=FONT)
     st.plotly_chart(fig_thresh, use_container_width=True, key="diag_thresh")
 
     # Feature stats
@@ -1225,7 +1227,8 @@ with tab5:
                 opacity=0.8,
             ))
             dark_layout(fig_feat, f"FEATURE PROFILE — {traffic_profile} (normalised)", h=300)
-            fig_feat.update_xaxes(tickangle=-30)
+            fig_feat.update_xaxes(tickangle=-30, title_text="Feature", title_font=FONT)
+            fig_feat.update_yaxes(title_text="Normalised Value", title_font=FONT)
             st.plotly_chart(fig_feat, use_container_width=True, key="predict_feat")
 
 
